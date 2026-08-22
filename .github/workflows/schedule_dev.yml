@@ -11,11 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: user-data
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         ref: dev
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
     - name: Test Douyin Accessibility
@@ -34,7 +34,7 @@ jobs:
       run: python utils/export_github_env.py
     - name: Run DouYin Spark Flow
       run: python main.py
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v5
       if: ${{ !cancelled() }}
       with:
         name: run-logs
