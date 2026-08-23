@@ -1,6 +1,12 @@
 name: DouYin Spark Flow Schedule Run
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Run even if a successful run already exists today
+        required: false
+        default: false
+        type: boolean
   schedule: # 定时任务
     - cron: "0 1 * * *" # 每天 1:00 UTC（对应北京时间 9:00）
 jobs:
@@ -8,12 +14,16 @@ jobs:
     timeout-minutes: 20
     runs-on: ubuntu-latest
     environment: user-data
+    permissions:
+      actions: read
+      contents: read
+    concurrency:
+      group: douyin-spark-flow
+      cancel-in-progress: false
     steps:
-    - uses: actions/checkout@v4
-      with:
-        ref: dev
+    - uses: actions/checkout@v5
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
     - name: Test Douyin Accessibility
@@ -23,17 +33,29 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+    - name: Run unit tests
+      run: python -m unittest discover -s tests
+    - name: Prevent duplicate daily runs
+      id: daily-guard
+      env:
+        FORCE_RUN: ${{ inputs.force || 'false' }}
+        GITHUB_TOKEN: ${{ github.token }}
+        WORKFLOW_FILE: schedule.yml
+      run: python utils/daily_guard.py
     - name: Ensure browsers are installed
+      if: steps.daily-guard.outputs.should_run == 'true'
       run: playwright install chromium --with-deps --only-shell
     - name: Export Github Environment Variables and Secrets to JSON
+      if: steps.daily-guard.outputs.should_run == 'true'
       env:
         VARS_JSON: ${{ toJson(vars) }}
         SECRETS_JSON: ${{ toJson(secrets) }}
       run: python utils/export_github_env.py
     - name: Run DouYin Spark Flow
+      if: steps.daily-guard.outputs.should_run == 'true'
       run: python main.py
-    - uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
+    - uses: actions/upload-artifact@v5
+      if: ${{ !cancelled() && steps.daily-guard.outputs.should_run == 'true' }}
       with:
         name: run-logs
         path: logs/
