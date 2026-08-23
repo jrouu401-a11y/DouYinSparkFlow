@@ -47,7 +47,9 @@
 
 ### 分享给朋友
 
-将整个项目文件夹或 GitHub 仓库链接分享给朋友即可。Windows 用户可双击根目录的 `一键部署.cmd`，浏览器会依次打开 Fork、配置生成器和 GitHub Actions 部署说明。
+将整个项目文件夹或 GitHub 仓库链接分享给朋友即可。需要下载时，请使用[下载一键部署包](https://github.com/jrouu401-a11y/DouYinSparkFlow/archive/refs/heads/main.zip)，不要在 GitHub 网页内点击 `一键部署.cmd` 文件，否则 GitHub 只会展示脚本源码。
+
+下载后解压 ZIP，Windows 用户双击根目录的 `一键部署.cmd`，浏览器会依次打开 Fork、配置生成器和 GitHub Actions 部署说明。
 
 每位使用者都必须使用自己的 GitHub 账号、抖音 Cookie 和目标列表完成配置；请勿分享或提交 `.env`、Cookie、GitHub Secrets 或运行日志。
 
