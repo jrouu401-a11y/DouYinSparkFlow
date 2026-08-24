@@ -56,7 +56,7 @@ jobs:
     - name: Run DouYin Spark Flow
       if: steps.daily-guard.outputs.should_run == 'true'
       run: python main.py
-    - uses: actions/upload-artifact@v5
+    - uses: actions/upload-artifact@v6
       if: ${{ !cancelled() && steps.daily-guard.outputs.should_run == 'true' }}
       with:
         name: run-logs
