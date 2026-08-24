@@ -70,11 +70,18 @@ def main():
         print(f"Unable to check previous workflow runs: {exc}", file=sys.stderr)
         raise SystemExit(1)
 
+    now = datetime.now(tz=timezone.utc)
+    today = now.astimezone(BEIJING_TZ).date()
     candidate_runs = [
         run
         for run in runs
         if str(run.get("id")) != str(current_run_id)
         and run.get("conclusion") == "success"
+        and run.get("created_at")
+        and datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
+        .astimezone(BEIJING_TZ)
+        .date()
+        == today
     ]
     successful_run_ids = set()
     for run in candidate_runs:
@@ -106,7 +113,7 @@ def main():
     if has_successful_run_today(
         runs,
         current_run_id,
-        datetime.now(tz=timezone.utc),
+        now,
         successful_run_ids=successful_run_ids,
     ):
         write_output(False, "A successful run already exists for today in Asia/Shanghai")
