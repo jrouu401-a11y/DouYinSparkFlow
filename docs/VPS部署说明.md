@@ -34,7 +34,7 @@ sudo systemctl enable --now douyin-spark-flow.timer
 systemctl list-timers douyin-spark-flow.timer
 ```
 
-四个窗口使用北京时间 09:00、09:30、10:00、10:30。状态保存于 `/var/lib/douyin-spark-flow/run-state.json`；已确认发送的目标不会被补偿窗口重复发送，Enter 后未确认的目标也不会自动重发。
+四个窗口使用北京时间 08:00、08:30、09:00、09:30。状态保存于 `/var/lib/douyin-spark-flow/run-state.json`；已确认发送的目标不会被补偿窗口重复发送，Enter 后未确认的目标也不会自动重发。
 
 ## 检查与故障处理
 

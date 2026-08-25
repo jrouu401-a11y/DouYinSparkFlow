@@ -19,6 +19,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn("ref: dev", workflow)
         self.assertIn("concurrency:", workflow)
 
+    def test_vps_timer_runs_at_eight_with_half_hour_compensation_windows(self):
+        timer = (Path(__file__).parents[1] / "deploy" / "systemd" / "douyin-spark-flow.timer").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("08:00:00 Asia/Shanghai", timer)
+        self.assertIn("08:30:00 Asia/Shanghai", timer)
+        self.assertIn("09:00:00 Asia/Shanghai", timer)
+        self.assertIn("09:30:00 Asia/Shanghai", timer)
+        self.assertNotIn("10:00:00 Asia/Shanghai", timer)
+
 
 if __name__ == "__main__":
     unittest.main()
