@@ -37,3 +37,10 @@ createApp({ setup() {
   }
   return { step, mode, form, github, stepItems, hitokotoOptions, targetCount, validationMessage, goToStep, nextStep, addAccount, removeAccount, addTarget, removeTarget, cookieStatus, copyVariables, copySecrets, copyEnvFile, resetAll, syncGithub };
 } }).use(ElementPlus).mount("#app");
+
+const cookieHelp = () => document.querySelectorAll('.account-block textarea + small').forEach((node) => {
+  if (node.querySelector('.helper-link')) return;
+  node.innerHTML = '<a class="helper-link" href="https://cookie-editor.com/" target="_blank" rel="noopener noreferrer">打开 Cookie-Editor</a> → Export → JSON。不要把 Cookie 发到聊天或提交到仓库。';
+});
+new MutationObserver(cookieHelp).observe(document.getElementById('app'), { childList: true, subtree: true });
+cookieHelp();
