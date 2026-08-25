@@ -7,7 +7,11 @@ on:
         required: false
         default: false
         type: boolean
-  # 正式定时任务已迁移到 VPS；此工作流仅保留手动诊断入口。
+  schedule: # 定时任务（UTC）
+    - cron: "0 0 * * *" # 北京时间 08:00
+    - cron: "30 0 * * *" # 北京时间 08:30 补偿
+    - cron: "0 1 * * *" # 北京时间 09:00 补偿
+    - cron: "30 1 * * *" # 北京时间 09:30 补偿
 jobs:
   run-main:
     timeout-minutes: 20

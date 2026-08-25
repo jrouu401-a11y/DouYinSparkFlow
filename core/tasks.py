@@ -10,7 +10,6 @@ from core.msg_builder import build_message
 from utils import norm
 from utils.config import get_config, get_userData
 from utils.logger import setup_logger
-from utils.run_state import load_state, merge_summary, save_state, target_key
 
 
 STATUS_PENDING = "待处理"
@@ -78,17 +77,15 @@ def retry_before_send(operation, retries, logger):
             time.sleep(2)
 
 
-def create_results(user, previous=None):
-    previous = previous or {}
+def create_results(user):
     return {
         target: {
-            "account_id": user["unique_id"],
             "account": user["username"],
             "target": target,
-            "status": previous.get(target, {}).get("status", STATUS_PENDING),
-            "attempts": previous.get(target, {}).get("attempts", 0),
-            "matched_name": previous.get(target, {}).get("matched_name"),
-            "reason": previous.get(target, {}).get("reason"),
+            "status": STATUS_PENDING,
+            "attempts": 0,
+            "matched_name": None,
+            "reason": None,
         }
         for target in user["targets"]
     }
@@ -325,45 +322,15 @@ def runTasks():
         raise
 
     logger = get_logger(config)
-    state = load_state()
-    all_results = {
-        user["unique_id"]: create_results(
-            user,
-            {
-                target: state["targets"].get(target_key(user["unique_id"], target), {})
-                for target in user["targets"]
-            },
-        )
-        for user in users
-    }
+    all_results = {user["unique_id"]: create_results(user) for user in users}
     playwright = browser = None
 
     try:
-        active_users = []
+        playwright, browser = get_browser()
+        logger.info("开始执行任务")
         for user in users:
-            active_targets = [
-                target
-                for target in user["targets"]
-                if all_results[user["unique_id"]][target]["status"]
-                not in {STATUS_SENT, STATUS_UNCONFIRMED}
-            ]
-            if active_targets:
-                active_users.append(({**user, "targets": active_targets}, active_targets))
-
-        if active_users:
-            playwright, browser = get_browser()
-            logger.info("开始执行任务")
-            for user, active_targets in active_users:
-                logger.info("开始处理账号 %s", user["username"])
-                run_user_task(
-                    browser,
-                    user,
-                    all_results[user["unique_id"]],
-                    config,
-                    logger,
-                )
-        else:
-            logger.info("当天目标均已处理，无需启动浏览器")
+            logger.info("开始处理账号 %s", user["username"])
+            run_user_task(browser, user, all_results[user["unique_id"]], config, logger)
     except Exception as exc:
         for results in all_results.values():
             mark_unfinished(results, STATUS_FAILED, exc)
@@ -375,7 +342,6 @@ def runTasks():
 
         summary = build_summary(all_results)
         write_summary(summary)
-        save_state(merge_summary(state, summary))
 
     if not summary["successful"]:
         raise TaskExecutionError(

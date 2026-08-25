@@ -3,7 +3,6 @@
 .vscode/
 chrome/
 logs/
-data/
 .DS_Store
 usersData.json
 .env
