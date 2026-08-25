@@ -7,4 +7,5 @@ if os.path.exists(".env"):
 
 from core.tasks import runTasks
 
-runTasks()
+if __name__ == "__main__":
+    runTasks()

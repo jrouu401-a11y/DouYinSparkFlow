@@ -1,0 +1,14 @@
+[Unit]
+Description=DouYin Spark Flow verified delivery
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=douyin
+Group=douyin
+WorkingDirectory=/opt/douyin-spark-flow
+EnvironmentFile=/etc/douyin-spark-flow/.env
+Environment=STATE_FILE=/var/lib/douyin-spark-flow/run-state.json
+Environment=RUN_LOCK_FILE=/run/douyin-spark-flow.lock
+ExecStart=/opt/douyin-spark-flow/.venv/bin/python /opt/douyin-spark-flow/server_runner.py
