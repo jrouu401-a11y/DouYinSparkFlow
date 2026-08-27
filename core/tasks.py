@@ -25,6 +25,7 @@ CONVERSATION_ITEM_SELECTOR = ".conversationConversationItemwrapper"
 CONVERSATION_TITLE_SELECTOR = ".conversationConversationItemtitle"
 CONVERSATION_LIST_SELECTOR = ".conversationConversationListwrapper"
 CHAT_EDITOR_SELECTOR = ".messageEditorimChatEditorContainer"
+MESSAGE_SEND_PATH_FRAGMENT = "/im/message/send"
 
 
 class TaskExecutionError(RuntimeError):
@@ -53,6 +54,17 @@ def handle_response(response: Response, user_id_map, logger):
     except Exception as exc:
         # The page may close while the final response callback is still queued.
         logger.debug("忽略无法读取的好友信息响应: %s", exc)
+
+
+def is_successful_message_send_response(response: Response) -> bool:
+    """Return whether a response acknowledges an outbound Web IM message."""
+    try:
+        return (
+            MESSAGE_SEND_PATH_FRAGMENT in response.url.lower()
+            and response.ok
+        )
+    except Exception:
+        return False
 
 
 def retry_operation(name, operation, retries, logger, delay=2):
@@ -189,14 +201,28 @@ def message_echo_count(page, message):
 
 
 def confirm_message_sent(
-    page, editor, message, before_message_count, timeout_seconds=5
+    page,
+    editor,
+    message,
+    before_message_count,
+    successful_send_responses,
+    before_send_response_count,
+    timeout_seconds=5,
 ):
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        if editor_is_empty(editor) and message_echo_count(page, message) > before_message_count:
+        if (
+            editor_is_empty(editor)
+            and message_echo_count(page, message) > before_message_count
+            and len(successful_send_responses) > before_send_response_count
+        ):
             return True
         time.sleep(0.25)
-    return editor_is_empty(editor) and message_echo_count(page, message) > before_message_count
+    return (
+        editor_is_empty(editor)
+        and message_echo_count(page, message) > before_message_count
+        and len(successful_send_responses) > before_send_response_count
+    )
 
 
 def prepare_message(element, page, message, timeout):
@@ -225,7 +251,14 @@ def run_user_task(browser, user, results, config, logger):
 
         page = context.new_page()
         user_id_map = {}
-        page.on("response", lambda response: handle_response(response, user_id_map, logger))
+        successful_send_responses = []
+
+        def on_response(response):
+            handle_response(response, user_id_map, logger)
+            if is_successful_message_send_response(response):
+                successful_send_responses.append(response)
+
+        page.on("response", on_response)
 
         retry_operation(
             "打开抖音聊天页面",
@@ -256,13 +289,21 @@ def run_user_task(browser, user, results, config, logger):
                 )
                 editor, before_message_count = prepared_message
                 update_result(result, STATUS_TYPED, attempts=attempts)
+                before_send_response_count = len(successful_send_responses)
                 editor.press("Enter")
 
-                if confirm_message_sent(page, editor, message, before_message_count):
+                if confirm_message_sent(
+                    page,
+                    editor,
+                    message,
+                    before_message_count,
+                    successful_send_responses,
+                    before_send_response_count,
+                ):
                     update_result(result, STATUS_SENT)
                     logger.info("账号 %s 已确认发送给 %s", user["username"], target)
                 else:
-                    update_result(result, STATUS_UNCONFIRMED, "发送后未确认消息回显")
+                    update_result(result, STATUS_UNCONFIRMED, "发送后未确认消息回显或服务端响应")
             except Exception as exc:
                 update_result(result, STATUS_FAILED, exc)
 
