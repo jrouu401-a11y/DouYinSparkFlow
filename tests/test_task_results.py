@@ -42,6 +42,29 @@ class FakeEditor:
         self.presses.append(key)
 
 
+class FakeTextLocator:
+    def __init__(self, count):
+        self._count = count
+
+    def count(self):
+        return self._count
+
+
+class FakeMessagePage:
+    def __init__(self, message_count):
+        self.message_count = message_count
+
+    def get_by_text(self, message, exact):
+        self.message = message
+        self.exact = exact
+        return FakeTextLocator(self.message_count)
+
+
+class EmptyEditor:
+    def inner_text(self):
+        return ""
+
+
 class DelayedMappingTitle:
     def inner_text(self):
         return "Friend"
@@ -110,7 +133,7 @@ class TaskResultTests(unittest.TestCase):
         ), patch.object(
             tasks, "build_message", return_value="message"
         ), patch.object(
-            tasks, "retry_before_send", return_value=(editor, 1)
+            tasks, "retry_before_send", return_value=((editor, 0), 1)
         ), patch.object(tasks, "confirm_message_sent", return_value=False):
             tasks.run_user_task(FakeBrowser(), self.user, results, self.config, logger)
 
@@ -126,6 +149,26 @@ class TaskResultTests(unittest.TestCase):
     def test_match_target_uses_short_id_from_response(self):
         user_id_map = {"Friend": ["friend", "other", "", "Friend", "Friend"]}
         self.assertEqual(tasks.match_target("Friend", {"friend"}, user_id_map), "friend")
+
+    def test_cleared_editor_without_message_echo_is_not_confirmation(self):
+        page = FakeMessagePage(message_count=0)
+        editor = EmptyEditor()
+
+        self.assertFalse(
+            tasks.confirm_message_sent(
+                page, editor, "message", before_message_count=0, timeout_seconds=0
+            )
+        )
+
+    def test_message_echo_after_submit_is_confirmation(self):
+        page = FakeMessagePage(message_count=1)
+        editor = EmptyEditor()
+
+        self.assertTrue(
+            tasks.confirm_message_sent(
+                page, editor, "message", before_message_count=0, timeout_seconds=0
+            )
+        )
 
     def test_scroll_rechecks_name_after_delayed_user_mapping_arrives(self):
         user_id_map = {}

@@ -181,22 +181,32 @@ def editor_is_empty(editor):
         return False
 
 
-def confirm_message_sent(editor, timeout_seconds=3):
+def message_echo_count(page, message):
+    try:
+        return page.get_by_text(message, exact=True).count()
+    except Exception:
+        return 0
+
+
+def confirm_message_sent(
+    page, editor, message, before_message_count, timeout_seconds=5
+):
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        if editor_is_empty(editor):
+        if editor_is_empty(editor) and message_echo_count(page, message) > before_message_count:
             return True
         time.sleep(0.25)
-    return editor_is_empty(editor)
+    return editor_is_empty(editor) and message_echo_count(page, message) > before_message_count
 
 
 def prepare_message(element, page, message, timeout):
     element.click()
     editor = page.locator(CHAT_EDITOR_SELECTOR)
     editor.wait_for(state="visible", timeout=timeout)
+    before_message_count = message_echo_count(page, message)
     clear_editor(editor)
     type_message(editor, message)
-    return editor
+    return editor, before_message_count
 
 
 def mark_unfinished(results, status, reason):
@@ -239,19 +249,20 @@ def run_user_task(browser, user, results, config, logger):
             message = build_message()
 
             try:
-                editor, attempts = retry_before_send(
+                prepared_message, attempts = retry_before_send(
                     lambda: prepare_message(element, page, message, config["browserTimeout"]),
                     config["taskRetryTimes"],
                     logger,
                 )
+                editor, before_message_count = prepared_message
                 update_result(result, STATUS_TYPED, attempts=attempts)
                 editor.press("Enter")
 
-                if confirm_message_sent(editor):
+                if confirm_message_sent(page, editor, message, before_message_count):
                     update_result(result, STATUS_SENT)
                     logger.info("账号 %s 已确认发送给 %s", user["username"], target)
                 else:
-                    update_result(result, STATUS_UNCONFIRMED, "发送后未确认输入框清空")
+                    update_result(result, STATUS_UNCONFIRMED, "发送后未确认消息回显")
             except Exception as exc:
                 update_result(result, STATUS_FAILED, exc)
 
