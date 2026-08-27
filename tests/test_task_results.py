@@ -42,6 +42,49 @@ class FakeEditor:
         self.presses.append(key)
 
 
+class DelayedMappingTitle:
+    def inner_text(self):
+        return "Friend"
+
+
+class DelayedMappingElement:
+    def locator(self, selector):
+        self.selector = selector
+        return DelayedMappingTitle()
+
+
+class DelayedMappingList:
+    def __init__(self, element):
+        self.element = element
+
+    def all(self):
+        return [self.element]
+
+    def element_handle(self):
+        return object()
+
+
+class DelayedMappingPage:
+    def __init__(self, user_id_map):
+        self.user_id_map = user_id_map
+        self.scroll_top = 0
+        self.element = DelayedMappingElement()
+
+    def locator(self, selector):
+        if selector == tasks.CONVERSATION_ITEM_SELECTOR:
+            return DelayedMappingList(self.element)
+        if selector == tasks.CONVERSATION_LIST_SELECTOR:
+            return DelayedMappingList(self.element)
+        raise AssertionError(f"Unexpected selector: {selector}")
+
+    def evaluate(self, script, scrollable):
+        if "+= 800" in script:
+            self.scroll_top = 800
+            self.user_id_map["Friend"] = ["friend", "", "", "Friend", "Friend"]
+            return None
+        return self.scroll_top
+
+
 class TaskResultTests(unittest.TestCase):
     def setUp(self):
         self.user = {
@@ -50,7 +93,11 @@ class TaskResultTests(unittest.TestCase):
             "cookies": [{"name": "sessionid"}],
             "targets": ["friend"],
         }
-        self.config = {"browserTimeout": 1, "taskRetryTimes": 3}
+        self.config = {
+            "browserTimeout": 1,
+            "friendListTimeout": 2000,
+            "taskRetryTimes": 3,
+        }
 
     def test_unconfirmed_send_is_not_retried_after_enter(self):
         results = tasks.create_results(self.user)
@@ -79,6 +126,21 @@ class TaskResultTests(unittest.TestCase):
     def test_match_target_uses_short_id_from_response(self):
         user_id_map = {"Friend": ["friend", "other", "", "Friend", "Friend"]}
         self.assertEqual(tasks.match_target("Friend", {"friend"}, user_id_map), "friend")
+
+    def test_scroll_rechecks_name_after_delayed_user_mapping_arrives(self):
+        user_id_map = {}
+        page = DelayedMappingPage(user_id_map)
+        logger = tasks.get_logger({"logLevel": "Error"})
+
+        with patch.object(tasks.time, "sleep"):
+            matched_target, display_name, _ = next(
+                tasks.scroll_and_select_user(
+                    page, "account", ["friend"], user_id_map, logger
+                )
+            )
+
+        self.assertEqual(matched_target, "friend")
+        self.assertEqual(display_name, "Friend")
 
 
 if __name__ == "__main__":

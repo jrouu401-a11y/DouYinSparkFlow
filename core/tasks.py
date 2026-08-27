@@ -107,14 +107,15 @@ def match_target(display_name, targets, user_id_map):
     return next((value for value in values if value and value in targets), None)
 
 
-def scroll_and_select_user(page, username, targets, user_id_map, logger):
+def scroll_and_select_user(
+    page, username, targets, user_id_map, logger, scroll_wait_seconds=1.5
+):
     remaining_targets = set(targets)
-    seen_names = set()
     empty_scrolls = 0
+    rescanned_from_top = False
 
     while remaining_targets:
         elements = page.locator(CONVERSATION_ITEM_SELECTOR).all()
-        found_new_name = False
 
         for element in elements:
             try:
@@ -123,32 +124,40 @@ def scroll_and_select_user(page, username, targets, user_id_map, logger):
                 logger.debug("读取好友名称失败: %s", exc)
                 continue
 
-            if display_name in seen_names:
-                continue
-            seen_names.add(display_name)
-            found_new_name = True
-
             target = match_target(display_name, remaining_targets, user_id_map)
             if target:
                 yield target, display_name, element
                 remaining_targets.remove(target)
                 break
         else:
-            empty_scrolls = 0 if found_new_name else empty_scrolls + 1
-            if empty_scrolls >= 10:
-                logger.warning("账号 %s 已到好友列表底部", username)
-                return
-
             scrollable = page.locator(CONVERSATION_LIST_SELECTOR).element_handle()
             if not scrollable:
                 raise TaskExecutionError(f"账号 {username} 未找到好友列表滚动容器")
 
             before = page.evaluate("element => element.scrollTop", scrollable)
             page.evaluate("element => element.scrollTop += 800", scrollable)
-            time.sleep(1.5)
+            time.sleep(scroll_wait_seconds)
             after = page.evaluate("element => element.scrollTop", scrollable)
-            if before == after:
-                empty_scrolls += 2
+            if before != after:
+                empty_scrolls = 0
+                continue
+
+            empty_scrolls += 1
+            if empty_scrolls < 5:
+                continue
+
+            # User info arrives asynchronously. Re-scan from the top once so a
+            # name first seen before its mapping arrived is not skipped forever.
+            if not rescanned_from_top:
+                logger.info("账号 %s 重新扫描好友列表以等待好友信息加载", username)
+                page.evaluate("element => element.scrollTop = 0", scrollable)
+                rescanned_from_top = True
+                empty_scrolls = 0
+                time.sleep(scroll_wait_seconds)
+                continue
+
+            logger.warning("账号 %s 已到好友列表底部", username)
+            return
 
 
 def clear_editor(editor):
@@ -218,7 +227,12 @@ def run_user_task(browser, user, results, config, logger):
         time.sleep(5)
 
         for target, display_name, element in scroll_and_select_user(
-            page, user["username"], user["targets"], user_id_map, logger
+            page,
+            user["username"],
+            user["targets"],
+            user_id_map,
+            logger,
+            scroll_wait_seconds=max(config["friendListTimeout"] / 1000, 0.2),
         ):
             result = results[target]
             update_result(result, STATUS_MATCHED, matched_name=display_name)
