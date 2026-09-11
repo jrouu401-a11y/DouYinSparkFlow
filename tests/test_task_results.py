@@ -165,8 +165,6 @@ class TaskResultTests(unittest.TestCase):
                 editor,
                 "message",
                 before_message_count=0,
-                successful_send_responses=[],
-                before_send_response_count=0,
                 timeout_seconds=0,
             )
         )
@@ -181,8 +179,20 @@ class TaskResultTests(unittest.TestCase):
                 editor,
                 "message",
                 before_message_count=0,
-                successful_send_responses=[],
-                before_send_response_count=0,
+                timeout_seconds=0,
+            )
+        )
+
+    def test_empty_editor_without_message_echo_is_not_confirmation(self):
+        page = FakeMessagePage(message_count=0)
+        editor = EmptyEditor()
+
+        self.assertFalse(
+            tasks.confirm_message_sent(
+                page,
+                editor,
+                "message",
+                before_message_count=0,
                 timeout_seconds=0,
             )
         )
@@ -197,24 +207,6 @@ class TaskResultTests(unittest.TestCase):
                 editor,
                 "message",
                 before_message_count=0,
-                successful_send_responses=[],
-                before_send_response_count=0,
-                timeout_seconds=0,
-            )
-        )
-
-    def test_message_echo_and_send_response_is_confirmation(self):
-        page = FakeMessagePage(message_count=1)
-        editor = EmptyEditor()
-
-        self.assertTrue(
-            tasks.confirm_message_sent(
-                page,
-                editor,
-                "message",
-                before_message_count=0,
-                successful_send_responses=[object()],
-                before_send_response_count=0,
                 timeout_seconds=0,
             )
         )

@@ -25,7 +25,6 @@ CONVERSATION_ITEM_SELECTOR = ".conversationConversationItemwrapper"
 CONVERSATION_TITLE_SELECTOR = ".conversationConversationItemtitle"
 CONVERSATION_LIST_SELECTOR = ".conversationConversationListwrapper"
 CHAT_EDITOR_SELECTOR = ".messageEditorimChatEditorContainer"
-MESSAGE_SEND_PATH_FRAGMENT = "/im/message/send"
 
 
 class TaskExecutionError(RuntimeError):
@@ -54,17 +53,6 @@ def handle_response(response: Response, user_id_map, logger):
     except Exception as exc:
         # The page may close while the final response callback is still queued.
         logger.debug("忽略无法读取的好友信息响应: %s", exc)
-
-
-def is_successful_message_send_response(response: Response) -> bool:
-    """Return whether a response acknowledges an outbound Web IM message."""
-    try:
-        return (
-            MESSAGE_SEND_PATH_FRAGMENT in response.url.lower()
-            and response.ok
-        )
-    except Exception:
-        return False
 
 
 def retry_operation(name, operation, retries, logger, delay=2):
@@ -205,32 +193,25 @@ def confirm_message_sent(
     editor,
     message,
     before_message_count,
-    successful_send_responses,
-    before_send_response_count,
     timeout_seconds=5,
 ):
-    """Confirm a send using a reliable network or combined UI signal.
+    """Confirm that the current conversation visibly contains the new message.
 
-    The web client does not always expose every signal in automation.  A
-    successful send endpoint response is authoritative; otherwise require both
-    a new exact message echo and an emptied editor.  We never press Enter again
-    here, so an inconclusive send remains ``未确认`` rather than being
-    duplicated.
+    A successful response from a generic IM endpoint is not sufficient: it can
+    acknowledge a request that did not produce an outbound message in the
+    selected conversation.  We never press Enter again here, so an
+    inconclusive send remains ``未确认`` rather than being duplicated.
     """
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         echoed = message_echo_count(page, message) > before_message_count
         cleared = editor_is_empty(editor)
-        acknowledged = len(successful_send_responses) > before_send_response_count
-        if acknowledged or (echoed and cleared):
+        if echoed and cleared:
             return True
         time.sleep(0.25)
     return (
-        len(successful_send_responses) > before_send_response_count
-        or (
-            message_echo_count(page, message) > before_message_count
-            and editor_is_empty(editor)
-        )
+        message_echo_count(page, message) > before_message_count
+        and editor_is_empty(editor)
     )
 
 
@@ -260,12 +241,8 @@ def run_user_task(browser, user, results, config, logger):
 
         page = context.new_page()
         user_id_map = {}
-        successful_send_responses = []
-
         def on_response(response):
             handle_response(response, user_id_map, logger)
-            if is_successful_message_send_response(response):
-                successful_send_responses.append(response)
 
         page.on("response", on_response)
 
@@ -307,7 +284,6 @@ def run_user_task(browser, user, results, config, logger):
                 )
                 editor, before_message_count = prepared_message
                 update_result(result, STATUS_TYPED, attempts=attempts)
-                before_send_response_count = len(successful_send_responses)
                 editor.press("Enter")
 
                 if confirm_message_sent(
@@ -315,8 +291,6 @@ def run_user_task(browser, user, results, config, logger):
                     editor,
                     message,
                     before_message_count,
-                    successful_send_responses,
-                    before_send_response_count,
                 ):
                     update_result(result, STATUS_SENT)
                     logger.info("账号 %s 已确认发送给 %s", user["username"], target)
