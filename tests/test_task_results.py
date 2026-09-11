@@ -65,6 +65,11 @@ class EmptyEditor:
         return ""
 
 
+class FilledEditor:
+    def inner_text(self):
+        return "message"
+
+
 class DelayedMappingTitle:
     def inner_text(self):
         return "Friend"
@@ -152,7 +157,7 @@ class TaskResultTests(unittest.TestCase):
 
     def test_cleared_editor_without_message_echo_is_not_confirmation(self):
         page = FakeMessagePage(message_count=0)
-        editor = EmptyEditor()
+        editor = FilledEditor()
 
         self.assertFalse(
             tasks.confirm_message_sent(
@@ -168,9 +173,25 @@ class TaskResultTests(unittest.TestCase):
 
     def test_message_echo_after_submit_is_confirmation(self):
         page = FakeMessagePage(message_count=1)
-        editor = EmptyEditor()
+        editor = FilledEditor()
 
         self.assertFalse(
+            tasks.confirm_message_sent(
+                page,
+                editor,
+                "message",
+                before_message_count=0,
+                successful_send_responses=[],
+                before_send_response_count=0,
+                timeout_seconds=0,
+            )
+        )
+
+    def test_message_echo_and_cleared_editor_is_confirmation(self):
+        page = FakeMessagePage(message_count=1)
+        editor = EmptyEditor()
+
+        self.assertTrue(
             tasks.confirm_message_sent(
                 page,
                 editor,

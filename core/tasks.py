@@ -209,19 +209,28 @@ def confirm_message_sent(
     before_send_response_count,
     timeout_seconds=5,
 ):
+    """Confirm a send using a reliable network or combined UI signal.
+
+    The web client does not always expose every signal in automation.  A
+    successful send endpoint response is authoritative; otherwise require both
+    a new exact message echo and an emptied editor.  We never press Enter again
+    here, so an inconclusive send remains ``未确认`` rather than being
+    duplicated.
+    """
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        if (
-            editor_is_empty(editor)
-            and message_echo_count(page, message) > before_message_count
-            and len(successful_send_responses) > before_send_response_count
-        ):
+        echoed = message_echo_count(page, message) > before_message_count
+        cleared = editor_is_empty(editor)
+        acknowledged = len(successful_send_responses) > before_send_response_count
+        if acknowledged or (echoed and cleared):
             return True
         time.sleep(0.25)
     return (
-        editor_is_empty(editor)
-        and message_echo_count(page, message) > before_message_count
-        and len(successful_send_responses) > before_send_response_count
+        len(successful_send_responses) > before_send_response_count
+        or (
+            message_echo_count(page, message) > before_message_count
+            and editor_is_empty(editor)
+        )
     )
 
 
