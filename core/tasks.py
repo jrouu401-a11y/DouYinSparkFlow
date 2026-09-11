@@ -278,6 +278,15 @@ def run_user_task(browser, user, results, config, logger):
         )
         time.sleep(5)
 
+        # An expired/invalid Cookie lands on the login page.  Detect this
+        # before querying the chat DOM so every target gets a useful failure
+        # reason instead of waiting for the old conversation selector timeout.
+        if hasattr(page, "locator"):
+            login_marker = page.locator("text=登录")
+            conversation_list = page.locator(CONVERSATION_LIST_SELECTOR)
+            if login_marker.count() and not conversation_list.count():
+                raise TaskExecutionError("Cookie 已失效或未登录，请更新 Cookies Secret")
+
         for target, display_name, element in scroll_and_select_user(
             page,
             user["username"],
