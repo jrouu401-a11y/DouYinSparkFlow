@@ -221,7 +221,7 @@ class TaskResultTests(unittest.TestCase):
         self.assertFalse(summary["successful"])
         self.assertEqual(summary["confirmed_count"], 0)
 
-    def test_short_id_mode_uses_only_short_id_from_response(self):
+    def test_id_mode_matches_custom_handle_and_numeric_id_but_not_nickname(self):
         user_id_map = {"Friend": ["friend", "other", "", "Friend", "Friend"]}
         self.assertEqual(
             tasks.match_target("Friend", {"friend"}, user_id_map, "short_id"),
@@ -230,6 +230,13 @@ class TaskResultTests(unittest.TestCase):
         self.assertIsNone(
             tasks.match_target("Friend", {"Friend"}, user_id_map, "short_id")
         )
+        self.assertEqual(tasks.match_target("Friend", {"other"}, user_id_map, "short_id"), "other")
+
+    def test_target_subset_cannot_add_unconfigured_recipient(self):
+        with self.assertRaises(tasks.TaskExecutionError):
+            tasks.select_requested_targets([self.user], "unknown")
+        selected = tasks.select_requested_targets([self.user], "friend")
+        self.assertEqual(selected[0]["targets"], ["friend"])
 
     def test_nickname_mode_uses_only_original_nickname_from_response(self):
         user_id_map = {"Remark": ["friend", "other", "", "Friend", "Remark"]}

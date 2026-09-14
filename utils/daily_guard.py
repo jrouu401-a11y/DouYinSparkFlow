@@ -102,7 +102,11 @@ def main():
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             print(f"Unable to inspect jobs for workflow run {run_id}: {exc}", file=sys.stderr)
             raise SystemExit(1)
-        if any(
+        partial = any(
+            step.get("name") == "Partial target selection" and step.get("conclusion") == "success"
+            for job in jobs for step in (job.get("steps") or [])
+        )
+        if not partial and any(
             step.get("name") == "Run DouYin Spark Flow"
             and step.get("conclusion") == "success"
             for job in jobs

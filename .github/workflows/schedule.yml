@@ -7,6 +7,11 @@ on:
         required: false
         default: false
         type: boolean
+      only_targets:
+        description: Optional exact target IDs separated by commas; blank uses all configured targets
+        required: false
+        default: ''
+        type: string
 # 自动定时将在一次人工运行获得全部“已确认发送”结果后恢复。
 # 目前仅保留 workflow_dispatch，避免失效登录态导致每日无效运行。
 jobs:
@@ -53,7 +58,12 @@ jobs:
       run: python utils/export_github_env.py
     - name: Run DouYin Spark Flow
       if: steps.daily-guard.outputs.should_run == 'true'
+      env:
+        ONLY_TARGETS: ${{ inputs.only_targets || '' }}
       run: python main.py
+    - name: Partial target selection
+      if: ${{ always() && inputs.only_targets != '' }}
+      run: echo "This validation covers a subset, not the full daily delivery."
     - uses: actions/upload-artifact@v6
       if: ${{ !cancelled() && steps.daily-guard.outputs.should_run == 'true' }}
       with:

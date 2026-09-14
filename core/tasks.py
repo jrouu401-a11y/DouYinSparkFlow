@@ -49,11 +49,11 @@ def handle_response(response: Response, user_id_map, logger):
 
     try:
         for item in response.json().get("data", []):
-            nickname = norm(item.get("nickname"))
-            remark_name = norm(item.get("remark_name", nickname))
+            nickname = norm(item.get("nickname") or "")
+            remark_name = norm(item.get("remark_name") or nickname)
             identifiers = [
-                item.get("short_id"),
-                item.get("unique_id"),
+                str(item.get("short_id") or ""),
+                str(item.get("unique_id") or ""),
                 item.get("sec_uid", ""),
                 nickname,
                 remark_name,
@@ -118,7 +118,9 @@ def match_target(display_name, targets, user_id_map, match_mode):
     display_name = norm(display_name)
     values = user_id_map.get(display_name, [])
     if match_mode == "short_id":
-        candidates = values[:1]
+        # Users call both legacy numeric IDs and custom handles their Douyin
+        # ID. The API stores the custom handle in unique_id, not short_id.
+        candidates = values[1:2] + values[:1]
     elif match_mode == "nickname":
         candidates = values[3:4]
     else:
@@ -296,6 +298,17 @@ def prepare_message(element, page, display_name, message, timeout):
     return editor, before_message_count
 
 
+def select_requested_targets(users, requested):
+    if not requested.strip():
+        return users
+    targets = set(filter(None, re.split(r"[\s,，]+", requested.strip())))
+    known = {target for user in users for target in user["targets"]}
+    if targets - known:
+        raise TaskExecutionError("指定补发目标不在 TASKS 名单中")
+    return [dict(user, targets=[target for target in user["targets"] if target in targets])
+            for user in users if targets.intersection(user["targets"])]
+
+
 def mark_unfinished(results, status, reason):
     for result in results.values():
         if result["status"] not in TERMINAL_STATUSES:
@@ -348,6 +361,7 @@ def run_user_task(browser, user, results, config, logger):
             update_result(result, STATUS_MATCHED, matched_name=display_name)
             message = build_message()
 
+            submitted = False
             try:
                 prepared_message, attempts = retry_before_send(
                     lambda: prepare_message(
@@ -358,6 +372,7 @@ def run_user_task(browser, user, results, config, logger):
                 )
                 editor, before_message_count = prepared_message
                 update_result(result, STATUS_TYPED, attempts=attempts)
+                submitted = True
                 page.locator(SEND_BUTTON_SELECTOR).click()
 
                 if confirm_message_sent(
@@ -372,7 +387,7 @@ def run_user_task(browser, user, results, config, logger):
                 else:
                     update_result(result, STATUS_UNCONFIRMED, "发送后未能确认刷新会话仍有新增消息")
             except Exception as exc:
-                update_result(result, STATUS_FAILED, exc)
+                update_result(result, STATUS_UNCONFIRMED if submitted else STATUS_FAILED, exc)
 
         for result in results.values():
             if result["status"] == STATUS_PENDING:
@@ -441,6 +456,7 @@ def runTasks():
     try:
         config = get_config()
         users = get_userData()
+        users = select_requested_targets(users, os.getenv("ONLY_TARGETS", ""))
     except Exception as exc:
         write_summary(
             {
