@@ -70,6 +70,39 @@ class FilledEditor:
         return "message"
 
 
+class StaticTextLocator:
+    def __init__(self, text, count=1):
+        self.text = text
+        self._count = count
+
+    def count(self):
+        return self._count
+
+    def inner_text(self):
+        return self.text
+
+
+class CurrentConversationLocator(StaticTextLocator):
+    def locator(self, selector):
+        if selector != tasks.CONVERSATION_TITLE_SELECTOR:
+            raise AssertionError(f"Unexpected selector: {selector}")
+        return StaticTextLocator(self.text)
+
+
+class ConversationSelectionPage:
+    def __init__(self, active_name, header_name, active=True):
+        self.active_name = active_name
+        self.header_name = header_name
+        self.active = active
+
+    def locator(self, selector):
+        if selector == tasks.CURRENT_CONVERSATION_SELECTOR:
+            return CurrentConversationLocator(self.active_name, int(self.active))
+        if selector == tasks.CHAT_HEADER_TITLE_SELECTOR:
+            return StaticTextLocator(self.header_name)
+        raise AssertionError(f"Unexpected selector: {selector}")
+
+
 class DelayedMappingTitle:
     def inner_text(self):
         return "Friend"
@@ -208,6 +241,18 @@ class TaskResultTests(unittest.TestCase):
                 "message",
                 before_message_count=0,
                 timeout_seconds=0,
+            )
+        )
+
+    def test_conversation_selection_requires_matching_active_item_and_header(self):
+        self.assertFalse(
+            tasks.conversation_is_selected(
+                ConversationSelectionPage("Friend", "Previous chat"), "Friend"
+            )
+        )
+        self.assertTrue(
+            tasks.conversation_is_selected(
+                ConversationSelectionPage("Friend", "Friend"), "Friend"
             )
         )
 

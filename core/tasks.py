@@ -24,6 +24,10 @@ TERMINAL_STATUSES = {STATUS_SENT, STATUS_NOT_FOUND, STATUS_FAILED, STATUS_UNCONF
 CONVERSATION_ITEM_SELECTOR = ".conversationConversationItemwrapper"
 CONVERSATION_TITLE_SELECTOR = ".conversationConversationItemtitle"
 CONVERSATION_LIST_SELECTOR = ".conversationConversationListwrapper"
+CURRENT_CONVERSATION_SELECTOR = (
+    ".conversationConversationItemwrapper.conversationConversationItemcurConversation"
+)
+CHAT_HEADER_TITLE_SELECTOR = ".RightPanelHeadertitle"
 # The wrapper is not focusable; keystrokes must be sent to its Slate editor.
 CHAT_EDITOR_SELECTOR = '.messageEditorimChatEditorContainer [contenteditable="true"]'
 
@@ -189,6 +193,28 @@ def message_echo_count(page, message):
         return 0
 
 
+def conversation_is_selected(page, display_name):
+    """Return whether both chat panes show the conversation just selected."""
+    try:
+        active_item = page.locator(CURRENT_CONVERSATION_SELECTOR)
+        if not active_item.count():
+            return False
+        active_name = norm(active_item.locator(CONVERSATION_TITLE_SELECTOR).inner_text())
+        header_name = norm(page.locator(CHAT_HEADER_TITLE_SELECTOR).inner_text())
+        return active_name == norm(display_name) and header_name == norm(display_name)
+    except Exception:
+        return False
+
+
+def wait_for_conversation_selection(page, display_name, timeout):
+    deadline = time.monotonic() + timeout / 1000
+    while time.monotonic() < deadline:
+        if conversation_is_selected(page, display_name):
+            return
+        time.sleep(0.1)
+    raise TaskExecutionError(f"会话未切换到好友 {display_name}")
+
+
 def confirm_message_sent(
     page,
     editor,
@@ -216,8 +242,9 @@ def confirm_message_sent(
     )
 
 
-def prepare_message(element, page, message, timeout):
+def prepare_message(element, page, display_name, message, timeout):
     element.click()
+    wait_for_conversation_selection(page, display_name, timeout)
     editor = page.locator(CHAT_EDITOR_SELECTOR)
     editor.wait_for(state="visible", timeout=timeout)
     before_message_count = message_echo_count(page, message)
@@ -279,7 +306,9 @@ def run_user_task(browser, user, results, config, logger):
 
             try:
                 prepared_message, attempts = retry_before_send(
-                    lambda: prepare_message(element, page, message, config["browserTimeout"]),
+                    lambda: prepare_message(
+                        element, page, display_name, message, config["browserTimeout"]
+                    ),
                     config["taskRetryTimes"],
                     logger,
                 )

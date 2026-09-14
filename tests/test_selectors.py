@@ -9,6 +9,11 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(tasks.CONVERSATION_TITLE_SELECTOR, '.conversationConversationItemtitle')
         self.assertEqual(tasks.CONVERSATION_LIST_SELECTOR, '.conversationConversationListwrapper')
         self.assertEqual(
+            tasks.CURRENT_CONVERSATION_SELECTOR,
+            '.conversationConversationItemwrapper.conversationConversationItemcurConversation',
+        )
+        self.assertEqual(tasks.CHAT_HEADER_TITLE_SELECTOR, '.RightPanelHeadertitle')
+        self.assertEqual(
             tasks.CHAT_EDITOR_SELECTOR,
             '.messageEditorimChatEditorContainer [contenteditable="true"]',
         )
