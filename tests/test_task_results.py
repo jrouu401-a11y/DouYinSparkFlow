@@ -158,6 +158,7 @@ class TaskResultTests(unittest.TestCase):
             "browserTimeout": 1,
             "friendListTimeout": 2000,
             "taskRetryTimes": 3,
+            "matchMode": "short_id",
         }
 
     def test_unconfirmed_send_is_not_retried_after_enter(self):
@@ -184,9 +185,25 @@ class TaskResultTests(unittest.TestCase):
         self.assertFalse(summary["successful"])
         self.assertEqual(summary["confirmed_count"], 0)
 
-    def test_match_target_uses_short_id_from_response(self):
+    def test_short_id_mode_uses_only_short_id_from_response(self):
         user_id_map = {"Friend": ["friend", "other", "", "Friend", "Friend"]}
-        self.assertEqual(tasks.match_target("Friend", {"friend"}, user_id_map), "friend")
+        self.assertEqual(
+            tasks.match_target("Friend", {"friend"}, user_id_map, "short_id"),
+            "friend",
+        )
+        self.assertIsNone(
+            tasks.match_target("Friend", {"Friend"}, user_id_map, "short_id")
+        )
+
+    def test_nickname_mode_uses_only_original_nickname_from_response(self):
+        user_id_map = {"Remark": ["friend", "other", "", "Friend", "Remark"]}
+        self.assertEqual(
+            tasks.match_target("Remark", {"Friend"}, user_id_map, "nickname"),
+            "Friend",
+        )
+        self.assertIsNone(
+            tasks.match_target("Remark", {"friend"}, user_id_map, "nickname")
+        )
 
     def test_cleared_editor_without_message_echo_is_not_confirmation(self):
         page = FakeMessagePage(message_count=0)
@@ -264,7 +281,7 @@ class TaskResultTests(unittest.TestCase):
         with patch.object(tasks.time, "sleep"):
             matched_target, display_name, _ = next(
                 tasks.scroll_and_select_user(
-                    page, "account", ["friend"], user_id_map, logger
+                    page, "account", ["friend"], user_id_map, logger, "short_id"
                 )
             )
 

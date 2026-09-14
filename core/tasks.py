@@ -48,13 +48,18 @@ def handle_response(response: Response, user_id_map, logger):
         for item in response.json().get("data", []):
             nickname = norm(item.get("nickname"))
             remark_name = norm(item.get("remark_name", nickname))
-            user_id_map[remark_name] = [
+            identifiers = [
                 item.get("short_id"),
                 item.get("unique_id"),
                 item.get("sec_uid", ""),
                 nickname,
                 remark_name,
             ]
+            # The conversation list can render either an original nickname or
+            # a user-set remark.  Retain the same server-provided identifiers
+            # for both labels; matching policy is enforced separately below.
+            user_id_map[nickname] = identifiers
+            user_id_map[remark_name] = identifiers
     except Exception as exc:
         # The page may close while the final response callback is still queued.
         logger.debug("忽略无法读取的好友信息响应: %s", exc)
@@ -106,14 +111,20 @@ def update_result(result, status, reason=None, matched_name=None, attempts=None)
         result["attempts"] = attempts
 
 
-def match_target(display_name, targets, user_id_map):
+def match_target(display_name, targets, user_id_map, match_mode):
     display_name = norm(display_name)
     values = user_id_map.get(display_name, [])
-    return next((value for value in values if value and value in targets), None)
+    if match_mode == "short_id":
+        candidates = values[:1]
+    elif match_mode == "nickname":
+        candidates = values[3:4]
+    else:
+        raise ValueError(f"Unsupported match mode: {match_mode}")
+    return next((value for value in candidates if value and value in targets), None)
 
 
 def scroll_and_select_user(
-    page, username, targets, user_id_map, logger, scroll_wait_seconds=1.5
+    page, username, targets, user_id_map, logger, match_mode, scroll_wait_seconds=1.5
 ):
     remaining_targets = set(targets)
     empty_scrolls = 0
@@ -129,7 +140,9 @@ def scroll_and_select_user(
                 logger.debug("读取好友名称失败: %s", exc)
                 continue
 
-            target = match_target(display_name, remaining_targets, user_id_map)
+            target = match_target(
+                display_name, remaining_targets, user_id_map, match_mode
+            )
             if target:
                 yield target, display_name, element
                 remaining_targets.remove(target)
@@ -298,6 +311,7 @@ def run_user_task(browser, user, results, config, logger):
             user["targets"],
             user_id_map,
             logger,
+            config["matchMode"],
             scroll_wait_seconds=max(config["friendListTimeout"] / 1000, 0.2),
         ):
             result = results[target]
