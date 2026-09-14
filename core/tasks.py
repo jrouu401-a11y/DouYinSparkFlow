@@ -24,7 +24,8 @@ TERMINAL_STATUSES = {STATUS_SENT, STATUS_NOT_FOUND, STATUS_FAILED, STATUS_UNCONF
 CONVERSATION_ITEM_SELECTOR = ".conversationConversationItemwrapper"
 CONVERSATION_TITLE_SELECTOR = ".conversationConversationItemtitle"
 CONVERSATION_LIST_SELECTOR = ".conversationConversationListwrapper"
-CHAT_EDITOR_SELECTOR = ".messageEditorimChatEditorContainer"
+# The wrapper is not focusable; keystrokes must be sent to its Slate editor.
+CHAT_EDITOR_SELECTOR = '.messageEditorimChatEditorContainer [contenteditable="true"]'
 
 
 class TaskExecutionError(RuntimeError):
