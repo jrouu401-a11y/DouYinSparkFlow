@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 
@@ -30,6 +31,8 @@ CURRENT_CONVERSATION_SELECTOR = (
 CHAT_HEADER_TITLE_SELECTOR = ".RightPanelHeadertitle"
 # The wrapper is not focusable; keystrokes must be sent to its Slate editor.
 CHAT_EDITOR_SELECTOR = '.messageEditorimChatEditorContainer [contenteditable="true"]'
+SEND_BUTTON_SELECTOR = '.e2e-send-msg-btn'
+OUTBOUND_TEXT_SELECTOR = '.messageMessageBoxisFromMe .MessageItemTextbubbleTextContent'
 
 
 class TaskExecutionError(RuntimeError):
@@ -201,7 +204,14 @@ def editor_is_empty(editor):
 
 def message_echo_count(page, message):
     try:
-        return page.get_by_text(message, exact=True).count()
+        return page.locator(OUTBOUND_TEXT_SELECTOR).evaluate_all(
+            """(nodes, message) => {
+                const text = node => node.nodeType === 3 ? node.textContent :
+                    node.nodeName === 'IMG' ? (node.getAttribute('title') || node.getAttribute('alt') || '') :
+                    node.nodeName === 'BR' ? '\\n' : Array.from(node.childNodes).map(text).join('');
+                return nodes.filter(node => text(node).trim() === message.trim()).length;
+            }""", message
+        )
     except Exception:
         return 0
 
@@ -234,6 +244,7 @@ def confirm_message_sent(
     message,
     before_message_count,
     timeout_seconds=5,
+    display_name=None,
 ):
     """Confirm that the current conversation visibly contains the new message.
 
@@ -247,12 +258,31 @@ def confirm_message_sent(
         echoed = message_echo_count(page, message) > before_message_count
         cleared = editor_is_empty(editor)
         if echoed and cleared:
-            return True
+            break
         time.sleep(0.25)
-    return (
+    visible_echo = (
         message_echo_count(page, message) > before_message_count
         and editor_is_empty(editor)
     )
+    if not visible_echo or not display_name:
+        return False
+    # A local optimistic bubble is not proof of delivery. Reload the server
+    # history and reopen the exact conversation before declaring success.
+    page.reload(wait_until="domcontentloaded")
+    page.locator(CONVERSATION_LIST_SELECTOR).wait_for(state="visible")
+    items = page.locator(CONVERSATION_ITEM_SELECTOR).filter(
+        has=page.locator(CONVERSATION_TITLE_SELECTOR).filter(has_text=re.compile(r"^" + re.escape(display_name) + r"$"))
+    )
+    if items.count() != 1:
+        return False
+    items.click()
+    wait_for_conversation_selection(page, display_name, 15000)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if message_echo_count(page, message) > before_message_count:
+            return True
+        time.sleep(0.25)
+    return False
 
 
 def prepare_message(element, page, display_name, message, timeout):
@@ -289,7 +319,7 @@ def run_user_task(browser, user, results, config, logger):
 
         retry_operation(
             "打开抖音聊天页面",
-            lambda: page.goto("https://www.douyin.com/chat"),
+            lambda: page.goto("https://www.douyin.com/chat", wait_until="domcontentloaded"),
             config["taskRetryTimes"],
             logger,
             delay=5,
@@ -328,18 +358,19 @@ def run_user_task(browser, user, results, config, logger):
                 )
                 editor, before_message_count = prepared_message
                 update_result(result, STATUS_TYPED, attempts=attempts)
-                editor.press("Enter")
+                page.locator(SEND_BUTTON_SELECTOR).click()
 
                 if confirm_message_sent(
                     page,
                     editor,
                     message,
                     before_message_count,
+                    display_name=display_name,
                 ):
                     update_result(result, STATUS_SENT)
                     logger.info("账号 %s 已确认发送给 %s", user["username"], target)
                 else:
-                    update_result(result, STATUS_UNCONFIRMED, "发送后未确认消息回显或服务端响应")
+                    update_result(result, STATUS_UNCONFIRMED, "发送后未能确认刷新会话仍有新增消息")
             except Exception as exc:
                 update_result(result, STATUS_FAILED, exc)
 

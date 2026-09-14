@@ -27,10 +27,21 @@ class FakeBrowser:
 
 
 class FakePage:
+    clicks = 0
+
+    def locator(self, selector):
+        return self
+
+    def count(self):
+        return 0
+
+    def click(self):
+        FakePage.clicks += 1
+
     def on(self, event, callback):
         pass
 
-    def goto(self, url):
+    def goto(self, url, **kwargs):
         return None
 
 
@@ -49,6 +60,9 @@ class FakeTextLocator:
     def count(self):
         return self._count
 
+    def evaluate_all(self, script, message):
+        return self._count
+
 
 class FakeMessagePage:
     def __init__(self, message_count):
@@ -57,6 +71,10 @@ class FakeMessagePage:
     def get_by_text(self, message, exact):
         self.message = message
         self.exact = exact
+        return FakeTextLocator(self.message_count)
+
+    def locator(self, selector):
+        assert selector == tasks.OUTBOUND_TEXT_SELECTOR
         return FakeTextLocator(self.message_count)
 
 
@@ -162,6 +180,7 @@ class TaskResultTests(unittest.TestCase):
         }
 
     def test_unconfirmed_send_is_not_retried_after_enter(self):
+        FakePage.clicks = 0
         results = tasks.create_results(self.user)
         editor = FakeEditor()
         logger = tasks.get_logger({"logLevel": "Error"})
@@ -176,8 +195,25 @@ class TaskResultTests(unittest.TestCase):
         ), patch.object(tasks, "confirm_message_sent", return_value=False):
             tasks.run_user_task(FakeBrowser(), self.user, results, self.config, logger)
 
-        self.assertEqual(editor.presses, ["Enter"])
+        self.assertEqual(editor.presses, [])
+        self.assertEqual(FakePage.clicks, 1)
         self.assertEqual(results["friend"]["status"], tasks.STATUS_UNCONFIRMED)
+
+    def test_confirmation_requires_message_to_survive_reload(self):
+        from unittest.mock import MagicMock
+        for persisted, expected in [(False, False), (True, True)]:
+            page = MagicMock()
+            page.locator.return_value.filter.return_value.count.return_value = 1
+            def count_message(page, message):
+                return int(not page.reload.called or persisted)
+            with patch.object(tasks, "message_echo_count", side_effect=count_message), patch.object(
+                tasks, "wait_for_conversation_selection"
+            ), patch.object(tasks.time, "monotonic", side_effect=range(100)), patch.object(tasks.time, "sleep"):
+                confirmed = tasks.confirm_message_sent(
+                    page, EmptyEditor(), "message", 0, timeout_seconds=0, display_name="Friend"
+                )
+            self.assertEqual(confirmed, expected)
+            page.reload.assert_called_once_with(wait_until="domcontentloaded")
 
     def test_incomplete_summary_is_not_successful(self):
         results = {"123": tasks.create_results(self.user)}
@@ -247,11 +283,11 @@ class TaskResultTests(unittest.TestCase):
             )
         )
 
-    def test_message_echo_and_cleared_editor_is_confirmation(self):
+    def test_local_echo_without_reloaded_history_is_not_confirmation(self):
         page = FakeMessagePage(message_count=1)
         editor = EmptyEditor()
 
-        self.assertTrue(
+        self.assertFalse(
             tasks.confirm_message_sent(
                 page,
                 editor,
