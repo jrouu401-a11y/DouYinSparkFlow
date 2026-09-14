@@ -315,6 +315,40 @@ def mark_unfinished(results, status, reason):
             update_result(result, status, reason=reason)
 
 
+def wait_for_chat_ready(page, timeout):
+    """Wait for the actual chat UI; don't label every missing selector expired cookies."""
+    try:
+        page.locator(CONVERSATION_LIST_SELECTOR).wait_for(state="visible", timeout=min(timeout, 45000))
+    except Exception as exc:
+        indicators = page.evaluate("""() => {
+            const body = document.body?.innerText || '';
+            return {
+                login: /扫码登录|验证码登录|密码登录/.test(body),
+                verification: /安全验证|完成验证|拖动滑块/.test(body),
+                network_error: /网络异常|网络错误|无法访问/.test(body),
+                frames: Array.from(document.querySelectorAll('iframe')).map(e => {
+                    try {const u=new URL(e.src); return u.origin+u.pathname;} catch {return '';}
+                }),
+                dom_classes: Array.from(new Set(Array.from(document.querySelectorAll('[class]'))
+                    .map(e=>typeof e.className==='string'?e.className:'')
+                    .filter(c=>/conversation|chat|Chat|login|Login/.test(c)))).slice(0,30)
+            };
+        }""")
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/chat-readiness.json", "w", encoding="utf-8") as file:
+            json.dump(indicators, file, ensure_ascii=False, indent=2)
+        get_logger({"logLevel": "Info"}).warning("聊天页面诊断: %s", json.dumps(indicators, ensure_ascii=False))
+        if indicators["verification"]:
+            reason = "抖音要求人工安全验证，已停止发送"
+        elif indicators["login"]:
+            reason = "云端显示登录界面，当前 Cookie 未建立聊天登录态"
+        elif indicators["network_error"]:
+            reason = "云端页面显示网络异常，聊天界面未加载"
+        else:
+            reason = "聊天界面45秒内未就绪；诊断见 chat-readiness.json（不含Cookie或聊天正文）"
+        raise TaskExecutionError(reason) from exc
+
+
 def run_user_task(browser, user, results, config, logger):
     context = None
     try:
@@ -337,16 +371,8 @@ def run_user_task(browser, user, results, config, logger):
             logger,
             delay=5,
         )
-        time.sleep(5)
-
-        # An expired/invalid Cookie lands on the login page.  Detect this
-        # before querying the chat DOM so every target gets a useful failure
-        # reason instead of waiting for the old conversation selector timeout.
-        if hasattr(page, "locator"):
-            login_marker = page.locator("text=登录")
-            conversation_list = page.locator(CONVERSATION_LIST_SELECTOR)
-            if login_marker.count() and not conversation_list.count():
-                raise TaskExecutionError("Cookie 已失效或未登录，请更新 Cookies Secret")
+        wait_for_chat_ready(page, config["browserTimeout"])
+        logger.info("聊天界面已就绪，开始核对目标ID")
 
         for target, display_name, element in scroll_and_select_user(
             page,

@@ -29,6 +29,9 @@ class FakeBrowser:
 class FakePage:
     clicks = 0
 
+    def wait_for(self, **kwargs):
+        pass
+
     def locator(self, selector):
         return self
 
