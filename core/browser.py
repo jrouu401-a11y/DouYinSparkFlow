@@ -17,7 +17,7 @@ def install_browser():
         print(f"发生未知错误：{e}")
 
 
-def get_browser():
+def get_browser(channel=None):
     """
     启动浏览器实例
     :return: 浏览器实例
@@ -40,7 +40,10 @@ def get_browser():
     try:
         # 启动浏览器
         playwright = sync_playwright().start() 
-        browser = playwright.chromium.launch(headless=headless)
+        options = {"headless": headless}
+        if channel:
+            options["channel"] = channel
+        browser = playwright.chromium.launch(**options)
         return playwright, browser
     except Exception as e:
         # 捕获浏览器启动错误

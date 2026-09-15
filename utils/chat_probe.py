@@ -112,7 +112,9 @@ def main():
         report["cookie_decoding"] = decoding_comparison(os.getenv("COOKIES_1230205904", ""))
         config = get_config()
         users = get_userData()
-        playwright, browser = get_browser()
+        channel = os.getenv("PROBE_BROWSER_CHANNEL") or None
+        report["browser_mode"] = channel or "headless_shell"
+        playwright, browser = get_browser(channel=channel)
         for index, user in enumerate(users):
             record = {"account_index": index, "stages": [], "ready": False}
             report["accounts"].append(record)

@@ -18,9 +18,10 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests
-      - run: playwright install chromium --with-deps --only-shell
+      - run: playwright install chromium --with-deps --no-shell
       - name: Read-only session probe
         env:
+          PROBE_BROWSER_CHANNEL: chromium
           TASKS: ${{ vars.TASKS }}
           COOKIES_1230205904: ${{ secrets.COOKIES_1230205904 }}
         run: python -m utils.chat_probe
