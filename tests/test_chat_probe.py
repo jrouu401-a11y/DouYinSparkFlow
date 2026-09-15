@@ -1,10 +1,20 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from utils.chat_probe import probe, decoding_comparison, observe_request
+from utils.chat_probe import probe, decoding_comparison, observe_request, observe_response
 
 
 class ProbeTests(unittest.TestCase):
+    def test_auth_response_keeps_codes_and_classification_only(self):
+        response = MagicMock()
+        response.url = 'https://www.douyin.com/aweme/v1/web/user/self/?secret=x'
+        response.status = 200
+        response.json.return_value = {'status_code': 8, 'status_msg': '请先登录', 'user': {'private': 'hidden'}}
+        evidence = []
+        observe_response(response, evidence)
+        self.assertEqual(evidence, [{'kind': 'user_self', 'http_status': 200, '0_status_code': 8,
+                                    'explicit_login_required': True, 'explicit_session_expired': False}])
+
     def test_transport_reports_booleans_not_values(self):
         request = MagicMock()
         request.url = 'https://www.douyin.com/chat?private=data'
