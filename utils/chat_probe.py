@@ -2,10 +2,31 @@
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from core.browser import get_browser
 from core.tasks import wait_for_chat_ready
 from utils.config import get_config, get_userData
+
+
+def session_present(cookies):
+    return any(c.get("name") == "sessionid" and bool(c.get("value")) for c in cookies)
+
+
+def observe_request(request, evidence):
+    url = urlsplit(request.url)
+    if url.hostname != "www.douyin.com":
+        return
+    if url.path != "/chat" and not url.path.startswith("/aweme/v1/web/"):
+        return
+    kind = "chat_document" if url.path == "/chat" else "web_api"
+    try:
+        header = request.header_value("cookie") or ""
+        present = any(part.strip().split("=", 1)[0] == "sessionid" for part in header.split(";"))
+        evidence[kind + "_observed"] = True
+        evidence[kind + "_session_sent"] = evidence.get(kind + "_session_sent", False) or present
+    except Exception:
+        evidence[kind + "_inspection_failed"] = True
 
 
 def decoding_comparison(raw):
@@ -60,7 +81,12 @@ def main():
             try:
                 context.set_default_timeout(45000)
                 context.add_cookies(user["cookies"])
+                record["session_in_input"] = session_present(user["cookies"])
+                record["session_in_browser_for_chat"] = session_present(context.cookies("https://www.douyin.com/chat"))
+                record["transport"] = {}
+                context.on("request", lambda request: observe_request(request, record["transport"]))
                 record["ready"] = probe(context, 45000, record["stages"])
+                record["session_remaining_for_chat"] = session_present(context.cookies("https://www.douyin.com/chat"))
             finally:
                 context.close()
         report["successful"] = bool(report["accounts"]) and all(x["ready"] for x in report["accounts"])

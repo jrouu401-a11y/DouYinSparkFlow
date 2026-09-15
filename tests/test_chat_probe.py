@@ -1,10 +1,22 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from utils.chat_probe import probe, decoding_comparison
+from utils.chat_probe import probe, decoding_comparison, observe_request
 
 
 class ProbeTests(unittest.TestCase):
+    def test_transport_reports_booleans_not_values(self):
+        request = MagicMock()
+        request.url = 'https://www.douyin.com/chat?private=data'
+        request.header_value.return_value = 'sessionid=private; other=hidden'
+        evidence = {}
+        observe_request(request, evidence)
+        self.assertEqual(evidence, {'chat_document_observed': True, 'chat_document_session_sent': True})
+        request.url = 'https://example.com/chat'
+        request.header_value.reset_mock()
+        observe_request(request, evidence)
+        request.header_value.assert_not_called()
+
     def test_decode_comparison_exposes_only_verdicts(self):
         import json
         result = decoding_comparison(json.dumps([{"value": "ordinary"}]))
