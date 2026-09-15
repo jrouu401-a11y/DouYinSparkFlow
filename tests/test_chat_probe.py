@@ -51,5 +51,6 @@ class ProbeTests(unittest.TestCase):
         with patch('utils.chat_probe.wait_for_chat_ready', side_effect=[None, RuntimeError('private')]):
             self.assertFalse(probe(context, 45000, records))
         self.assertEqual(len(records), 2)
-        self.assertEqual(records[-1], {'stage': 'reload', 'ready': False, 'error_type': 'RuntimeError'})
+        self.assertEqual(records[-1], {'stage': 'reload', 'ready': False, 'error_type': 'RuntimeError', 'redacted_screenshot': True})
+        self.assertIn('mask', context.new_page.return_value.screenshot.call_args.kwargs)
         self.assertEqual(context.new_page.call_count, 1)

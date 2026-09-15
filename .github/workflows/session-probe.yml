@@ -29,4 +29,6 @@ jobs:
         if: always()
         with:
           name: session-probe
-          path: logs/*.json
+          path: |
+            logs/*.json
+            logs/page-redacted.png

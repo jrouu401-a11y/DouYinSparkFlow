@@ -101,6 +101,17 @@ def probe(context, timeout, records):
         except Exception as exc:
             # The readiness helper produces sanitized UI indicators separately.
             record["error_type"] = type(exc).__name__
+            try:
+                Path("logs").mkdir(exist_ok=True)
+                page.screenshot(
+                    path="logs/page-redacted.png",
+                    mask=[page.locator('img, svg, canvas, video, iframe, input, textarea, [contenteditable], '
+                                       '.conversationConversationListwrapper, .messageMessageBoxmessageBox, .RightPanelHeadertitle')],
+                    animations="disabled", timeout=10000,
+                )
+                record["redacted_screenshot"] = True
+            except Exception:
+                record["redacted_screenshot"] = False
             return False
     return True
 
