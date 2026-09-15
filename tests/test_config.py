@@ -45,6 +45,13 @@ class ConfigTests(unittest.TestCase):
         ):
             self.assertEqual(config_module.get_userData()[0]["targets"], ["friend"])
 
+    def test_cookie_json_values_are_not_double_decoded(self):
+        tasks = json.dumps([{"unique_id": "123", "targets": ["friend"]}])
+        value = 'literal\\n\\u0041"quoted'
+        cookies = json.dumps([{"name": "sessionid", "value": value, "domain": ".douyin.com", "path": "/"}])
+        with patch.dict(os.environ, {"TASKS": tasks, "COOKIES_123": cookies}, clear=True):
+            self.assertEqual(config_module.get_userData()[0]["cookies"][0]["value"], value)
+
 
 if __name__ == "__main__":
     unittest.main()

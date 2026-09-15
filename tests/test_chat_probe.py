@@ -1,10 +1,18 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from utils.chat_probe import probe
+from utils.chat_probe import probe, decoding_comparison
 
 
 class ProbeTests(unittest.TestCase):
+    def test_decode_comparison_exposes_only_verdicts(self):
+        import json
+        result = decoding_comparison(json.dumps([{"value": "ordinary"}]))
+        self.assertEqual(result, {"raw_json_valid": True, "legacy_json_valid": True, "legacy_changes_values": False})
+        result = decoding_comparison(json.dumps([{"value": 'a"b'}]))
+        self.assertTrue(result["raw_json_valid"])
+        self.assertFalse(result["legacy_json_valid"])
+
     def test_reads_initial_reload_and_new_tab_without_sending(self):
         context = MagicMock()
         records = []

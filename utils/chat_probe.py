@@ -8,6 +8,22 @@ from core.tasks import wait_for_chat_ready
 from utils.config import get_config, get_userData
 
 
+def decoding_comparison(raw):
+    result = {"raw_json_valid": False, "legacy_json_valid": False, "legacy_changes_values": None}
+    try:
+        original = json.loads(raw)
+        result["raw_json_valid"] = True
+    except ValueError:
+        return result
+    try:
+        legacy = json.loads(raw.encode("utf-8").decode("unicode_escape"))
+        result["legacy_json_valid"] = True
+        result["legacy_changes_values"] = original != legacy
+    except (ValueError, UnicodeError):
+        pass
+    return result
+
+
 def probe(context, timeout, records):
     page = context.new_page()
     for stage in ("initial", "reload", "new_tab"):
@@ -33,6 +49,7 @@ def main():
     playwright = browser = None
     report = {"mode": "diagnostic_only", "successful": False, "accounts": []}
     try:
+        report["cookie_decoding"] = decoding_comparison(os.getenv("COOKIES_1230205904", ""))
         config = get_config()
         users = get_userData()
         playwright, browser = get_browser()

@@ -120,9 +120,8 @@ def get_userData():
         if len(set(normalized_targets)) != len(normalized_targets):
             raise ConfigurationError(f"{username} 的任务存在重复目标好友")
         cookies_key = f"cookies_{unique_id}".upper()
-        cookies_str = (
-            os.getenv(cookies_key, "").encode("utf-8").decode("unicode_escape")
-        )
+        # JSON already defines escaping; decoding twice corrupts cookie values.
+        cookies_str = os.getenv(cookies_key, "")
         if not cookies_str:
             raise ConfigurationError(f"{username} 的任务缺少 {cookies_key} 环境变量")
         try:
