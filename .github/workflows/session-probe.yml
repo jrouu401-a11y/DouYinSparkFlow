@@ -1,0 +1,31 @@
+name: Read-only chat session diagnostic
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: user-data
+    concurrency:
+      group: douyin-spark-flow
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests
+      - run: playwright install chromium --with-deps --only-shell
+      - name: Read-only session probe
+        env:
+          TASKS: ${{ vars.TASKS }}
+          COOKIES_1230205904: ${{ secrets.COOKIES_1230205904 }}
+        run: python -m utils.chat_probe
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: session-probe
+          path: logs/*.json
